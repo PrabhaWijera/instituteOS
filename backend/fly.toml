@@ -1,25 +1,37 @@
-app = 'instituteos'
-primary_region = 'sin'
+app = "instituteos-api"
+primary_region = "sin"
 
 [build]
-  dockerfile = 'Dockerfile'
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "4000"
+  BYPASS_GEOFENCING = "false"
+  BILLING_CYCLE = "30d"
+  BILLING_CRON = "0 0 * * *"
+  LOG_LEVEL = "info"
 
 [http_service]
   internal_port = 4000
   force_https = true
-  auto_stop_machines = 'stop'
+  auto_stop_machines = false
   auto_start_machines = true
-  min_machines_running = 0
-  processes = ['app']
+  min_machines_running = 1
 
-  [[http_service.checks]]
-    interval = '30s'
-    timeout = '10s'
-    grace_period = '30s'
-    method = 'GET'
-    path = '/api/health'
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 50
+    soft_limit = 40
 
 [[vm]]
-  memory = '512mb'
-  cpu_kind = 'shared'
+  memory = "512mb"
+  cpu_kind = "shared"
   cpus = 1
+
+[[http_service.checks]]
+  grace_period = "30s"
+  interval = "15s"
+  method = "get"
+  path = "/api/health"
+  timeout = "10s"

@@ -19,15 +19,10 @@ const logger = winston.createLogger({
   level: env.NODE_ENV === 'production' ? 'info' : 'debug',
   format: env.NODE_ENV === 'production' ? prodFormat : devFormat,
   defaultMeta: { service: 'nexclass-api' },
-  transports: [
-    new winston.transports.Console(),
-    ...(env.NODE_ENV === 'production'
-      ? [
-          new winston.transports.File({ filename: 'logs/error.log', level: 'error', maxsize: 5242880, maxFiles: 5 }),
-          new winston.transports.File({ filename: 'logs/combined.log', maxsize: 5242880, maxFiles: 5 }),
-        ]
-      : []),
-  ],
+  // In production (Fly.io / containers) write only to stdout — the platform
+  // captures console output. File transports are omitted because the
+  // container filesystem is read-only for the app user.
+  transports: [new winston.transports.Console()],
 });
 
 export default logger;

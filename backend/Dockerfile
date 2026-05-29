@@ -25,6 +25,7 @@ COPY --from=deps /app/prisma ./prisma
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/package.json ./
 COPY docker-entrypoint.sh ./
+COPY seed-prod.js ./
 RUN sed -i 's/\r$//' docker-entrypoint.sh && chmod +x docker-entrypoint.sh
 USER nexclass
 EXPOSE 4000
