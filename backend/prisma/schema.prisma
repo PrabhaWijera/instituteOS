@@ -1,0 +1,373 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── ENUMS ───────────────────────────────────────────────
+
+enum Role {
+  SUPER_ADMIN
+  INSTITUTE_ADMIN
+  TEACHER
+  STUDENT
+  PARENT
+}
+
+enum VerificationStatus {
+  PENDING_PROFILE
+  PENDING_VERIFICATION
+  VERIFIED
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAYMENT_DUE
+  SUSPENDED
+  CANCELLED
+}
+
+enum SessionStatus {
+  ONGOING
+  COMPLETED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAYMENT_READY
+  PAID
+}
+
+enum MaterialType {
+  PDF
+  VIDEO_LINK
+  LIVE_LINK
+}
+
+// ─── MODELS ──────────────────────────────────────────────
+
+model Institute {
+  id               String    @id @default(uuid())
+  name             String
+  code             String    @unique
+  address          String
+  city             String
+  phone            String
+  lat              Float?
+  lng              Float?
+  logoUrl          String?
+  brandColor       String?   @default("#7C3AED")
+  subscriptionPlan String    @default("FREE")
+  isActive         Boolean   @default(true)
+  isDeleted        Boolean   @default(false)
+  deletedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  settings         InstituteSettings?
+  users            User[]
+  classes          TuitionClass[]
+  students         Student[]
+  invites          UserInvite[]
+  notifications    Notification[]
+
+  @@map("institutes")
+}
+
+model InstituteSettings {
+  id                      String    @id @default(uuid())
+  instituteId             String    @unique
+  gracePeriodDays         Int       @default(5)
+  autoSuspendAfterDays    Int       @default(7)
+  billingCycleDays        Int       @default(30)
+  currency                String    @default("LKR")
+  requireGps              Boolean   @default(true)
+  geofenceRadiusMeters    Int       @default(1000)
+  otpExpiryMinutes        Int       @default(10)
+  allowManualOverride     Boolean   @default(true)
+  attendanceBlockOnDue    Boolean   @default(true)
+  autoPaymentReminders    Boolean   @default(true)
+  allowPartialPayments    Boolean   @default(false)
+  notifyStudentRegister   Boolean   @default(true)
+  notifyParentInvite      Boolean   @default(true)
+  notifyEnrollment        Boolean   @default(true)
+  notifyFeeDue            Boolean   @default(true)
+  notifyAbsent            Boolean   @default(true)
+  notifyPaymentReceipt    Boolean   @default(true)
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  institute               Institute @relation(fields: [instituteId], references: [id], onDelete: Cascade)
+
+  @@map("institute_settings")
+}
+
+model User {
+  id              String     @id @default(uuid())
+  email           String     @unique
+  passwordHash    String
+  fullName        String
+  phone           String?
+  role            Role
+  profileImage    String?
+  isActive        Boolean    @default(true)
+  isDeleted       Boolean    @default(false)
+  lastLoginAt     DateTime?
+  instituteId     String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  institute       Institute?          @relation(fields: [instituteId], references: [id])
+  student         Student?
+  teacherClasses  TuitionClass[]      @relation("TeacherClasses")
+  sessions        AttendanceSession[]
+  materials       ClassMaterial[]
+  notifications   Notification[]
+  sentInvites     UserInvite[]        @relation("InviteSender")
+  aiChats         AiChatMessage[]
+  parentLinks     ParentStudentLink[] @relation("ParentLinks")
+  manualMarks     AttendanceRecord[]  @relation("MarkedBy")
+  refreshTokens   RefreshToken[]
+  recordedPayments PaymentDue[]       @relation("RecordedBy")
+
+  @@map("users")
+}
+
+model Student {
+  id                 String             @id @default(uuid())
+  userId             String             @unique
+  instituteId        String
+  dob                DateTime?
+  gender             String?
+  grade              String
+  address            String?
+  parentName         String?
+  parentEmail        String?
+  parentPhone        String?
+  verificationStatus VerificationStatus @default(PENDING_PROFILE)
+  isDeleted          Boolean            @default(false)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  user               User               @relation(fields: [userId], references: [id])
+  institute          Institute          @relation(fields: [instituteId], references: [id])
+  enrollments        StudentEnrollment[]
+  attendanceRecords  AttendanceRecord[]
+  paymentDues        PaymentDue[]
+  parentLinks        ParentStudentLink[] @relation("StudentLinks")
+
+  @@map("students")
+}
+
+model TuitionClass {
+  id              String    @id @default(uuid())
+  name            String
+  subject         String
+  grade           String
+  teacherId       String
+  instituteId     String
+  feeAmount       Float
+  maxCapacity     Int?
+  description     String?
+  scheduleDays    String[]
+  startTime       String
+  durationMinutes Int
+  isActive        Boolean   @default(true)
+  isDeleted       Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  teacher         User      @relation("TeacherClasses", fields: [teacherId], references: [id])
+  institute       Institute @relation(fields: [instituteId], references: [id])
+  enrollments     StudentEnrollment[]
+  sessions        AttendanceSession[]
+  materials       ClassMaterial[]
+
+  @@map("tuition_classes")
+}
+
+model StudentEnrollment {
+  id                 String             @id @default(uuid())
+  studentId          String
+  classId            String
+  subscriptionStatus SubscriptionStatus @default(ACTIVE)
+  enrolledAt         DateTime           @default(now())
+  lastBillingDate    DateTime?
+  nextBillingDate    DateTime?
+  updatedAt          DateTime           @updatedAt
+
+  student            Student            @relation(fields: [studentId], references: [id])
+  class              TuitionClass       @relation(fields: [classId], references: [id])
+  paymentDues        PaymentDue[]
+
+  @@unique([studentId, classId])
+  @@map("student_enrollments")
+}
+
+model AttendanceSession {
+  id        String        @id @default(uuid())
+  classId   String
+  teacherId String
+  otpCode   String
+  status    SessionStatus @default(ONGOING)
+  startedAt DateTime      @default(now())
+  endedAt   DateTime?
+  createdAt DateTime      @default(now())
+
+  class     TuitionClass    @relation(fields: [classId], references: [id])
+  teacher   User            @relation(fields: [teacherId], references: [id])
+  records   AttendanceRecord[]
+
+  @@map("attendance_sessions")
+}
+
+model AttendanceRecord {
+  id             String    @id @default(uuid())
+  sessionId      String
+  studentId      String
+  checkInTime    DateTime  @default(now())
+  latitude       Float?
+  longitude      Float?
+  distanceMeters Float?
+  isManual       Boolean   @default(false)
+  markedById     String?
+  reason         String?
+  createdAt      DateTime  @default(now())
+
+  session        AttendanceSession @relation(fields: [sessionId], references: [id])
+  student        Student           @relation(fields: [studentId], references: [id])
+  markedBy       User?             @relation("MarkedBy", fields: [markedById], references: [id])
+
+  @@unique([sessionId, studentId])
+  @@map("attendance_records")
+}
+
+model PaymentDue {
+  id            String        @id @default(uuid())
+  enrollmentId  String
+  studentId     String
+  amount        Float
+  periodStart   DateTime
+  periodEnd     DateTime
+  status        PaymentStatus @default(UNPAID)
+  readyAt       DateTime?
+  paidAt        DateTime?
+  recordedById  String?
+  paymentMethod String?
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  enrollment    StudentEnrollment @relation(fields: [enrollmentId], references: [id])
+  student       Student           @relation(fields: [studentId], references: [id])
+  recordedBy    User?             @relation("RecordedBy", fields: [recordedById], references: [id])
+
+  @@map("payment_dues")
+}
+
+model ClassMaterial {
+  id           String       @id @default(uuid())
+  classId      String
+  uploadedById String
+  title        String
+  type         MaterialType
+  url          String
+  isVisible    Boolean      @default(false)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  class        TuitionClass @relation(fields: [classId], references: [id])
+  uploadedBy   User         @relation(fields: [uploadedById], references: [id])
+
+  @@map("class_materials")
+}
+
+model Notification {
+  id          String     @id @default(uuid())
+  userId      String
+  instituteId String?
+  title       String
+  message     String
+  type        String
+  isRead      Boolean    @default(false)
+  createdAt   DateTime   @default(now())
+
+  user        User       @relation(fields: [userId], references: [id])
+  institute   Institute? @relation(fields: [instituteId], references: [id])
+
+  @@map("notifications")
+}
+
+model UserInvite {
+  id          String    @id @default(uuid())
+  email       String
+  token       String    @unique
+  role        Role
+  instituteId String?
+  classId     String?
+  sentById    String
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  sentBy      User       @relation("InviteSender", fields: [sentById], references: [id])
+  institute   Institute? @relation(fields: [instituteId], references: [id])
+
+  @@map("user_invites")
+}
+
+model ParentStudentLink {
+  id        String   @id @default(uuid())
+  parentId  String
+  studentId String
+  createdAt DateTime @default(now())
+
+  parent    User    @relation("ParentLinks", fields: [parentId], references: [id])
+  student   Student @relation("StudentLinks", fields: [studentId], references: [id])
+
+  @@unique([parentId, studentId])
+  @@map("parent_student_links")
+}
+
+model AiChatMessage {
+  id        String   @id @default(uuid())
+  userId    String
+  role      String
+  content   String
+  subject   String?
+  grade     String?
+  language  String?
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@map("ai_chat_messages")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@map("refresh_tokens")
+}
+
+model EmailLog {
+  id         String   @id @default(uuid())
+  template   String
+  to         String
+  status     String   // "sent" | "failed" | "retrying"
+  attempts   Int      @default(0)
+  error      String?
+  createdAt  DateTime @default(now())
+  sentAt     DateTime?
+
+  @@map("email_logs")
+}

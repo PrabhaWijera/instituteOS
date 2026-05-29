@@ -1,0 +1,3 @@
+-- Add soft-delete columns to institutes table
+ALTER TABLE "institutes" ADD COLUMN IF NOT EXISTS "isDeleted" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "institutes" ADD COLUMN IF NOT EXISTS "deletedAt" TIMESTAMP(3);

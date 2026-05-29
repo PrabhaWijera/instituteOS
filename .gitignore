@@ -1,0 +1,87 @@
+# ─── Dependencies ────────────────────────────────────────────
+node_modules/
+.pnp
+.pnp.js
+
+# ─── Build outputs ───────────────────────────────────────────
+dist/
+build/
+out/
+.next/
+.nuxt/
+
+# ─── Environment variables (ALL env files — no exceptions) ───
+.env
+.env.*
+**/.env
+**/.env.*
+
+# ─── Prisma ──────────────────────────────────────────────────
+backend/prisma/migrations/*.sql
+# Keep migration folders but ignore generated client
+backend/node_modules/.prisma/
+
+# ─── Logs ────────────────────────────────────────────────────
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ─── OS files ────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ─── IDE / Editor ────────────────────────────────────────────
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.swp
+*.swo
+
+# ─── Testing ─────────────────────────────────────────────────
+coverage/
+.nyc_output/
+*.lcov
+
+# ─── TypeScript ──────────────────────────────────────────────
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+
+# ─── Next.js ─────────────────────────────────────────────────
+frontend/.next/
+frontend/out/
+frontend/.vercel/
+
+# ─── Sentry ──────────────────────────────────────────────────
+.sentryclirc
+
+# ─── Cache ───────────────────────────────────────────────────
+.cache/
+.parcel-cache/
+.turbo/
+.eslintcache
+.stylelintcache
+
+# ─── Uploads / temp files ────────────────────────────────────
+uploads/
+tmp/
+temp/
+
+# ─── Docker ──────────────────────────────────────────────────
+.env.docker
+
+# ─── Load test artifacts ─────────────────────────────────────
+loadtest/results/

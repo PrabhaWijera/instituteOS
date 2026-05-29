@@ -1,0 +1,30 @@
+# ============================================================
+# NexClass Terraform Variables — copy to terraform.tfvars
+# and fill in your actual values (never commit terraform.tfvars)
+# ============================================================
+
+# ── Oracle Cloud ──────────────────────────────────────────────
+# Find these in OCI Console → Profile → User settings / Tenancy
+tenancy_ocid     = "ocid1.tenancy.oc1..xxxxx"
+user_ocid        = "ocid1.user.oc1..xxxxx"
+fingerprint      = "xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx"
+private_key_path = "~/.oci/oci_api_key.pem"
+region           = "ap-mumbai-1"        # or ap-singapore-1, us-ashburn-1, etc.
+compartment_ocid = "ocid1.tenancy.oc1..xxxxx"  # same as tenancy for root compartment
+
+# VM resources (Always Free quota: 4 OCPU total, 24 GB RAM total across all A1 instances)
+vm_ocpus     = 2
+vm_memory_gb = 12
+
+# Paste the contents of your ~/.ssh/id_rsa.pub here
+ssh_public_key = "ssh-rsa AAAA... user@host"
+
+# Restrict to your home/office IP in production — "x.x.x.x/32"
+ssh_allowed_cidrs = ["0.0.0.0/0"]
+
+# ── Cloudflare R2 ──────────────────────────────────────────────
+# Cloudflare Dashboard → R2 → Manage R2 API tokens (create token with R2:Edit)
+cloudflare_api_token  = "your-cloudflare-api-token-here"
+
+# Cloudflare Dashboard → R2 → your account ID appears in the URL
+cloudflare_account_id = "your-32-char-cloudflare-account-id"

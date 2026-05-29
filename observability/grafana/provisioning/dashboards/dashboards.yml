@@ -1,0 +1,13 @@
+apiVersion: 1
+
+providers:
+  - name: 'NexClass Dashboards'
+    orgId: 1
+    folder: 'NexClass'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUIUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards
+

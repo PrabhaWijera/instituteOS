@@ -1,0 +1,103 @@
+super admin cant dele users...
+institue admin cant delete  teachers 
+institute admin can delete the classs and update 
+i need student and teachers active and deactivate toggl button, also delete update functions can institue admin can do those ,, 
+
+paymentt logic is ned to check with 5min ecasue i want to test t that we can later update that to 30 days.
+
+
+users can upload their profile images those images can update again, and that image only for tat related user , o data leakages 
+
+
+institute admin can teachers deactive ate , delete 
+
+
+when its deletedits not deactivated, its soft delete but that delete confirmation alert show its deactivated and also button sow as deactivate chage that , becaue we do soft delete not deaacivate, 
+
+
+payemtn illing 
+Currently in backend/.env (testing only):
+
+BILLING_CYCLE=5m          ← test: payment due 5 min after enrollment
+BILLING_CRON=*/5 * * * *  ← test: worker checks every 5 min
+For production, change these two lines to:
+
+BILLING_CYCLE=30d         ← prod: payment due 30 days after enrollment  
+BILLING_CRON=0 9 * * *    ← prod: worker checks once daily at 9 AM
+For development (local, longer test window):
+
+BILLING_CYCLE=1d          ← dev: payment due tomorrow
+BILLING_CRON=0 * * * *    ← dev: worker checks once per hour
+Nothing else in the codebase is hardcoded anymore — these two env keys fully control billing timing. When you're done testing, just update those two values in backend/.env and rebuild the backend.
+
+
+test all with 5 users teachers
+class
+stuents 
+
+the n unit test 
+other testing 
+security 
+
+67/67 tests pass with zero errors. Now finish the remaining todos:
+
+All done. Here's a complete summary of everything that was built:
+
+Testing Suite — Complete
+Backend Unit Tests (Vitest) — 67/67 passing
+File	Tests	What it covers
+auth.test.ts
+11
+Login flow, token refresh, CSRF, health
+attendance.test.ts
+5
+Auth protection on all attendance endpoints
+payment.test.ts
+4
+Auth protection on payment endpoints
+enrollment.test.ts
+12
+RBAC (student/teacher can't enroll), UUID validation, duplicate enrollment detection
+class.test.ts
+12
+Full CRUD auth/RBAC, teacher validation, class creation
+security.test.ts
+23
+JWT tampering, expired tokens, SQL injection, XSS injection, RBAC across all roles, oversized payloads, path traversal, security headers
+E2E Tests (Playwright)
+File	Role	Tests
+auth.spec.ts
+All
+Login UI, validation, visibility toggle
+navigation.spec.ts
+Unauthenticated
+Redirect to login, route protection
+student-flow.spec.ts
+Student
+Dashboard, classes, attendance, fees, notifications, unauthorized page blocking
+teacher-flow.spec.ts
+Teacher
+Dashboard, sessions, reports, materials, unauthorized blocking
+parent-flow.spec.ts
+Parent
+Children, attendance, fees, no duplicate nav, unauthorized blocking
+admin-flow.spec.ts
+Institute Admin
+Faculty, students, classes, payments, settings sections
+E2E role tests run only when credentials are provided via env vars (see tests/load/.env.example).
+
+Load Test (k6) — 25 concurrent users × 3 minutes
+10 Students — check classes, fees, attendance, notifications, dashboard
+7 Teachers — list sessions, classes, dashboard, notifications
+5 Parents — list children, child attendance, child payments, notifications
+3 Admins — dashboard, students, classes, payments, enrollments
+Thresholds: p95 response < 2s, error rate < 5%.
+
+Runner Script
+# Unit + security only (fast, no infra)
+.\scripts\run-tests.ps1 -UnitOnly
+# E2E only (needs frontend running)
+.\scripts\run-tests.ps1 -E2EOnly
+# All tests + load test (needs Docker + running app)
+.\scripts\run-tests.ps1 -LoadTest
+To run the load test, fill in tests/load/.env.example with real test account credentials, rename to .env.load, and run .\scripts\run-tests.ps1 -LoadTest.

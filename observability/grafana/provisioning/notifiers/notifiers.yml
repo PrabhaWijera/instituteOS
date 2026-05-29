@@ -1,0 +1,12 @@
+apiVersion: 1
+
+notifiers:
+  - name: Email Alert
+    type: email
+    isDefault: true
+    sendReminder: true
+    frequency: 24h
+    settings:
+      addresses: ${ALERT_EMAIL_RECIPIENTS}
+      singleEmail: false
+

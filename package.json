@@ -1,0 +1,31 @@
+{
+  "name": "nexclass",
+  "version": "1.0.0",
+  "private": true,
+  "description": "NexClass monorepo root — pre-commit hooks and workspace scripts",
+  "scripts": {
+    "prepare": "husky",
+    "dev": "docker compose up -d postgres && concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "lint:backend": "cd backend && npm run lint",
+    "lint:frontend": "cd frontend && npm run lint",
+    "lint": "npm run lint:backend && npm run lint:frontend",
+    "test:backend": "cd backend && npm test",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.2.10"
+  },
+  "lint-staged": {
+    "backend/src/**/*.ts": [
+      "cd backend && npx eslint --fix",
+      "cd backend && npx prettier --write"
+    ],
+    "frontend/src/**/*.{ts,tsx}": [
+      "cd frontend && npx eslint --fix",
+      "cd frontend && npx prettier --write"
+    ]
+  }
+}

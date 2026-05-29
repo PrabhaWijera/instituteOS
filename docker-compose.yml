@@ -1,0 +1,213 @@
+version: '3.8'
+
+services:
+  # ===== API Gateway (Nginx) =====
+  nginx:
+    image: nginx:alpine
+    container_name: nexclass-nginx
+    restart: unless-stopped
+    ports:
+      - '80:80'      # HTTP — all public traffic enters here
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - nexclass
+
+  # ===== Core Application =====
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: nexclass-backend
+    restart: unless-stopped
+    # Port NOT exposed to host — only reachable via nginx inside Docker network
+    expose:
+      - '4000'
+    env_file:
+      - ./backend/.env
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      ALERT_EMAIL_RECIPIENTS: ${ALERT_EMAIL_RECIPIENTS:-admin@example.com}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      jaeger:
+        condition: service_started
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:4000/api/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - nexclass
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost/api}
+        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-ws://localhost/ws}
+    container_name: nexclass-frontend
+    restart: unless-stopped
+    # Port NOT exposed to host — only reachable via nginx inside Docker network
+    expose:
+      - '3000'
+    env_file:
+      - ./frontend/.env.local
+    depends_on:
+      - backend
+    networks:
+      - nexclass
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: nexclass-db
+    restart: unless-stopped
+    ports:
+      - '5432:5432'
+    environment:
+      POSTGRES_DB: nexclass
+      POSTGRES_USER: nexclass
+      POSTGRES_PASSWORD: nexclass_secure_password
+      # Enable pg_stat_statements (replaces RDS Performance Insights — zero cost)
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    command: >
+      postgres
+        -c shared_preload_libraries=pg_stat_statements
+        -c pg_stat_statements.track=all
+        -c log_min_duration_statement=500
+        -c log_connections=on
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U nexclass']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nexclass
+
+  # ===== Observability Stack =====
+
+  # Prometheus - Metrics collection and storage
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: nexclass-prometheus
+    restart: unless-stopped
+    ports:
+      - '9090:9090'
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./observability/alert-rules.yml:/etc/prometheus/alert-rules.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=7d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    depends_on:
+      - backend
+    networks:
+      - nexclass
+
+  # Loki - Log aggregation
+  loki:
+    image: grafana/loki:latest
+    container_name: nexclass-loki
+    restart: unless-stopped
+    ports:
+      - '3100:3100'
+    volumes:
+      - ./observability/loki-config.yml:/etc/loki/local-config.yaml
+      - loki_data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - nexclass
+
+  # Jaeger - Distributed tracing
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: nexclass-jaeger
+    restart: unless-stopped
+    ports:
+      - '6831:6831/udp'
+      - '6832:6832/udp'
+      - '5778:5778'
+      - '16686:16686'
+      - '14268:14268'
+      - '14250:14250'
+      - '9411:9411'
+      - '4317:4317'
+      - '4318:4318'
+    environment:
+      COLLECTOR_OTLP_ENABLED: 'true'
+    volumes:
+      - jaeger_data:/badger
+    networks:
+      - nexclass
+
+  # Grafana - Dashboards and alerting
+  grafana:
+    image: grafana/grafana:latest
+    container_name: nexclass-grafana
+    restart: unless-stopped
+    ports:
+      - '3001:3000'
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_USER: admin
+      GF_INSTALL_PLUGINS: grafana-piechart-panel
+      GF_SERVER_ROOT_URL: http://localhost:3001
+      GF_SMTP_ENABLED: 'true'
+      GF_SMTP_HOST: ${SMTP_HOST}
+      GF_SMTP_PORT: ${SMTP_PORT}
+      GF_SMTP_USER: ${SMTP_USER}
+      GF_SMTP_PASSWORD: ${SMTP_PASS}
+      # Grafana requires a plain email address here, not "Name <email>".
+      GF_SMTP_FROM_ADDRESS: ${GRAFANA_SMTP_FROM_ADDRESS:-noreply@yourdomain.com}
+      GF_SMTP_FROM_NAME: 'NexClass Alerts'
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./observability/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+      - ./observability/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
+      - ./observability/grafana/provisioning/notifiers:/etc/grafana/provisioning/notifiers
+    depends_on:
+      - prometheus
+      - loki
+      - jaeger
+    networks:
+      - nexclass
+
+  # Alertmanager - Alert routing and notifications
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: nexclass-alertmanager
+    restart: unless-stopped
+    ports:
+      - '9093:9093'
+    volumes:
+      - ./observability/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+      - alertmanager_data:/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+    networks:
+      - nexclass
+
+networks:
+  nexclass:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  prometheus_data:
+  loki_data:
+  jaeger_data:
+  grafana_data:
+  alertmanager_data:
