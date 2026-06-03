@@ -27,6 +27,26 @@ import logger from '@/lib/logger';
 
 // Student OTP verification states
 type StudentState = 'idle' | 'enter_otp' | 'verifying' | 'success' | 'outside_range' | 'fee_blocked' | 'wrong_otp';
+type GpsStatus = 'pending' | 'acquired' | 'denied' | 'unavailable';
+
+const GEO_OPTIONS: PositionOptions = {
+  enableHighAccuracy: false,
+  timeout: 30000,
+  maximumAge: 300000,
+};
+
+function geoErrorMessage(error: GeolocationPositionError): string {
+  switch (error.code) {
+    case error.PERMISSION_DENIED:
+      return 'Location permission blocked. Open site settings and allow location for this site.';
+    case error.POSITION_UNAVAILABLE:
+      return 'Could not detect your location. Tap "Retry location" or try a device with GPS.';
+    case error.TIMEOUT:
+      return 'Location timed out. Tap "Retry location" and try again.';
+    default:
+      return 'Unable to get your location. Please try again.';
+  }
+}
 
 export default function AttendancePage() {
   const user = useAuthStore((s) => s.user);
@@ -57,12 +77,52 @@ export default function AttendancePage() {
   const [studentState, setStudentState] = useState<StudentState>('idle');
   const [otp, setOtp] = useState('');
   const [verifying, setVerifying] = useState(false);
-  const [gpsStatus, setGpsStatus] = useState<'pending' | 'acquired' | 'denied'>('pending');
+  const [gpsStatus, setGpsStatus] = useState<GpsStatus>('pending');
+  const [studentCoords, setStudentCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [locating, setLocating] = useState(false);
   const [studentHistory, setStudentHistory] = useState<any[]>([]);
   const [studentClasses, setStudentClasses] = useState<TuitionClass[]>([]);
   const [selectedStudentClass, setSelectedStudentClass] = useState('');
 
   useEffect(() => { fetchData(); }, []);
+
+  async function acquireStudentLocation(force = false): Promise<{ latitude: number; longitude: number }> {
+    if (!navigator.geolocation) {
+      setGpsStatus('unavailable');
+      throw new Error('Geolocation is not supported by your browser');
+    }
+    if (!force && studentCoords) {
+      setGpsStatus('acquired');
+      return studentCoords;
+    }
+
+    setLocating(true);
+    try {
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, GEO_OPTIONS);
+      });
+      const coords = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+      setStudentCoords(coords);
+      setGpsStatus('acquired');
+      return coords;
+    } catch (err) {
+      const geoErr = err as GeolocationPositionError;
+      if (geoErr?.code === geoErr.PERMISSION_DENIED) setGpsStatus('denied');
+      else if (geoErr?.code === geoErr.POSITION_UNAVAILABLE) setGpsStatus('unavailable');
+      else setGpsStatus('pending');
+      throw err;
+    } finally {
+      setLocating(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!isStudent) return;
+    acquireStudentLocation().catch(() => {
+      // Initial attempt may fail until user grants permission — UI shows retry.
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isStudent]);
 
   async function fetchData() {
     try {
@@ -176,19 +236,12 @@ export default function AttendancePage() {
     setStudentState('verifying');
     setVerifying(true);
     try {
-      let lat: number | undefined;
-      let lng: number | undefined;
-      setGpsStatus('pending');
+      let coords: { latitude: number; longitude: number };
       try {
-        const pos = await new Promise<GeolocationPosition>((res, rej) =>
-          navigator.geolocation.getCurrentPosition(res, rej, { timeout: 10000 })
-        );
-        lat = pos.coords.latitude;
-        lng = pos.coords.longitude;
-        setGpsStatus('acquired');
-      } catch {
-        setGpsStatus('denied');
-        toast.error('Location access is required to mark attendance');
+        coords = await acquireStudentLocation(true);
+      } catch (err) {
+        const geoErr = err as GeolocationPositionError;
+        toast.error(geoErr?.code !== undefined ? geoErrorMessage(geoErr) : 'Location access is required to mark attendance');
         setStudentState('idle');
         return;
       }
@@ -196,8 +249,8 @@ export default function AttendancePage() {
       await api.post('/attendance/verify-otp', {
         otpCode: otp,
         classId: selectedStudentClass,
-        latitude: lat,
-        longitude: lng,
+        latitude: coords.latitude,
+        longitude: coords.longitude,
       });
       setStudentState('success');
       toast.success('Attendance marked!');
@@ -228,9 +281,33 @@ export default function AttendancePage() {
         <PageHeader title="Mark Attendance" description="Enter the OTP shown by your teacher" />
 
         {/* GPS status bar */}
-        <div className={`flex items-center gap-2 rounded-md p-3 text-sm ${gpsStatus === 'acquired' ? 'bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300' : gpsStatus === 'denied' ? 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300' : 'bg-muted text-muted-foreground'}`}>
-          <MapPin className="h-4 w-4" />
-          {gpsStatus === 'acquired' ? 'GPS acquired' : gpsStatus === 'denied' ? 'GPS denied — attendance may fail' : 'GPS will be requested when you verify'}
+        <div className={`flex items-center justify-between gap-2 rounded-md p-3 text-sm ${gpsStatus === 'acquired' ? 'bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300' : gpsStatus === 'denied' ? 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300' : 'bg-muted text-muted-foreground'}`}>
+          <div className="flex items-center gap-2">
+            <MapPin className="h-4 w-4" />
+            {gpsStatus === 'acquired'
+              ? 'Location ready'
+              : gpsStatus === 'denied'
+                ? 'Location blocked — allow it in browser site settings'
+                : gpsStatus === 'unavailable'
+                  ? 'Location unavailable on this device — tap Retry'
+                  : locating
+                    ? 'Getting your location...'
+                    : 'Location will be requested when you verify'}
+          </div>
+          {gpsStatus !== 'acquired' && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={locating}
+              onClick={() => acquireStudentLocation(true).catch((err) => {
+                const geoErr = err as GeolocationPositionError;
+                toast.error(geoErr?.code !== undefined ? geoErrorMessage(geoErr) : 'Could not get location');
+              })}
+            >
+              {locating ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Retry location'}
+            </Button>
+          )}
         </div>
 
         {/* State 1: Idle / Enter OTP */}
