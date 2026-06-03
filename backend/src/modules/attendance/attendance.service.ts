@@ -17,7 +17,9 @@ import { notificationService } from '../notification/notification.service';
 
 async function redisSafeGet(key: string): Promise<string | null> {
   try {
-    return (await redis.get(key)) as string | null;
+    const val = await redis.get(key);
+    if (val == null) return null;
+    return String(val);
   } catch (err) {
     logger.warn('[Attendance] Redis GET failed — falling back to DB OTP', {
       key,
@@ -29,7 +31,8 @@ async function redisSafeGet(key: string): Promise<string | null> {
 
 async function redisSafeSet(key: string, value: string, exSeconds: number): Promise<void> {
   try {
-    await redis.set(key, value, { ex: exSeconds });
+    // Always store as string — Upstash may return numbers otherwise and break OTP compare
+    await redis.set(key, String(value), { ex: exSeconds });
   } catch (err) {
     logger.warn('[Attendance] Redis SET failed — OTP will be served from DB', {
       key,
@@ -219,11 +222,16 @@ class AttendanceService {
     });
     if (!session) throw new ApiError(404, 'No active session for this class');
 
-    // STEP 2 — Verify OTP
-    // Redis is the fast path; DB otpCode is the fallback when Redis is unavailable.
-    const redisOtp = await redisSafeGet(`otp:${session.id}`);
-    const validOtp = redisOtp ?? session.otpCode;
-    if (data.otpCode !== validOtp) throw new ApiError(400, 'Invalid OTP code');
+    // STEP 2 — Verify OTP (DB is source of truth; Redis can be stale or return numeric types)
+    const submitted = data.otpCode.trim();
+    const dbOtp = String(session.otpCode).trim();
+    if (submitted !== dbOtp) {
+      const redisOtp = await redisSafeGet(`otp:${session.id}`);
+      const redisOtpStr = redisOtp != null ? String(redisOtp).trim() : null;
+      if (submitted !== redisOtpStr) {
+        throw new ApiError(400, 'Invalid OTP code');
+      }
+    }
 
     // STEP 3 — Geofence check
     let distance = 0;
