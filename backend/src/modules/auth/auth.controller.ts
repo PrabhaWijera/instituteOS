@@ -12,11 +12,12 @@ export const registerOwner = asyncHandler(async (req: Request, res: Response) =>
 export const login = asyncHandler(async (req: Request, res: Response) => {
   const result = await authService.login(req.body);
 
-  // Set refresh token as httpOnly cookie
+  // Set refresh token as httpOnly cookie (SameSite=None for cross-origin frontend/API in production)
+  const isProd = process.env.NODE_ENV === 'production';
   res.cookie('refreshToken', result.refreshToken, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    secure: isProd,
+    sameSite: isProd ? 'none' : 'lax',
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     path: '/',
   });
@@ -47,7 +48,12 @@ export const logout = asyncHandler(async (req: Request, res: Response) => {
     await authService.logout(req.user.userId, refreshToken);
   }
 
-  res.clearCookie('refreshToken', { path: '/' });
+  const isProd = process.env.NODE_ENV === 'production';
+  res.clearCookie('refreshToken', {
+    path: '/',
+    secure: isProd,
+    sameSite: isProd ? 'none' : 'lax',
+  });
   res.status(200).json({ success: true, message: 'Logged out successfully' });
 });
 

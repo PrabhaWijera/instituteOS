@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store';
 import api from '@/lib/api';
 import { PageHeader } from '@/components/layout/page-header';
@@ -390,8 +391,9 @@ function StudentDashboard({ data, userId }: { data: StudentData; userId: string 
 }
 
 function ParentDashboard() {
+  const router = useRouter();
   useEffect(() => {
-    window.location.href = '/children';
-  }, []);
+    router.replace('/children');
+  }, [router]);
   return <PageLoading />;
 }

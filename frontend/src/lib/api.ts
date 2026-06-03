@@ -1,15 +1,22 @@
 import axios from 'axios';
 
+const TOKEN_KEY = 'nexclass_access_token';
+
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL,
   withCredentials: true,
   headers: { 'Content-Type': 'application/json' },
 });
 
-let accessToken: string | null = null;
+let accessToken: string | null =
+  typeof window !== 'undefined' ? sessionStorage.getItem(TOKEN_KEY) : null;
 
 export function setAccessToken(token: string | null) {
   accessToken = token;
+  if (typeof window !== 'undefined') {
+    if (token) sessionStorage.setItem(TOKEN_KEY, token);
+    else sessionStorage.removeItem(TOKEN_KEY);
+  }
 }
 
 export function getAccessToken() {
@@ -40,10 +47,11 @@ api.interceptors.response.use(
           { withCredentials: true }
         );
         accessToken = data.data.accessToken;
+        setAccessToken(data.data.accessToken);
         originalRequest.headers.Authorization = `Bearer ${accessToken}`;
         return api(originalRequest);
       } catch {
-        accessToken = null;
+        setAccessToken(null);
         // Don't hard-redirect here — let the auth store + layout handle it
         return Promise.reject(error);
       }
