@@ -110,6 +110,7 @@ app.get('/api/health', (_req, res) => {
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     circuits,
+    bypassGeofencing: env.BYPASS_GEOFENCING === 'true',
   });
 });
 

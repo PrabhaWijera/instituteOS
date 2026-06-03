@@ -29,11 +29,23 @@ import logger from '@/lib/logger';
 type StudentState = 'idle' | 'enter_otp' | 'verifying' | 'success' | 'outside_range' | 'fee_blocked' | 'wrong_otp';
 type GpsStatus = 'pending' | 'acquired' | 'denied' | 'unavailable';
 
-const GEO_OPTIONS: PositionOptions = {
+const GEO_CACHED: PositionOptions = {
   enableHighAccuracy: false,
-  timeout: 30000,
-  maximumAge: 300000,
+  timeout: 8000,
+  maximumAge: 600000,
 };
+
+const GEO_FRESH: PositionOptions = {
+  enableHighAccuracy: false,
+  timeout: 45000,
+  maximumAge: 0,
+};
+
+function getCurrentPosition(options: PositionOptions): Promise<GeolocationPosition> {
+  return new Promise((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(resolve, reject, options);
+  });
+}
 
 function geoErrorMessage(error: GeolocationPositionError): string {
   switch (error.code) {
@@ -83,6 +95,7 @@ export default function AttendancePage() {
   const [studentHistory, setStudentHistory] = useState<any[]>([]);
   const [studentClasses, setStudentClasses] = useState<TuitionClass[]>([]);
   const [selectedStudentClass, setSelectedStudentClass] = useState('');
+  const [bypassGeofencing, setBypassGeofencing] = useState(false);
 
   useEffect(() => { fetchData(); }, []);
 
@@ -98,9 +111,12 @@ export default function AttendancePage() {
 
     setLocating(true);
     try {
-      const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, GEO_OPTIONS);
-      });
+      let pos: GeolocationPosition;
+      try {
+        pos = await getCurrentPosition(GEO_CACHED);
+      } catch {
+        pos = await getCurrentPosition(GEO_FRESH);
+      }
       const coords = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
       setStudentCoords(coords);
       setGpsStatus('acquired');
@@ -118,6 +134,9 @@ export default function AttendancePage() {
 
   useEffect(() => {
     if (!isStudent) return;
+    api.get('/health')
+      .then(({ data }) => setBypassGeofencing(!!data.bypassGeofencing))
+      .catch(() => setBypassGeofencing(false));
     acquireStudentLocation().catch(() => {
       // Initial attempt may fail until user grants permission — UI shows retry.
     });
@@ -240,10 +259,15 @@ export default function AttendancePage() {
       try {
         coords = await acquireStudentLocation(true);
       } catch (err) {
-        const geoErr = err as GeolocationPositionError;
-        toast.error(geoErr?.code !== undefined ? geoErrorMessage(geoErr) : 'Location access is required to mark attendance');
-        setStudentState('idle');
-        return;
+        if (bypassGeofencing) {
+          coords = { latitude: 0, longitude: 0 };
+          toast.info('GPS unavailable — marking attendance without location check.');
+        } else {
+          const geoErr = err as GeolocationPositionError;
+          toast.error(geoErr?.code !== undefined ? geoErrorMessage(geoErr) : 'Location access is required to mark attendance');
+          setStudentState('idle');
+          return;
+        }
       }
 
       await api.post('/attendance/verify-otp', {
@@ -294,20 +318,25 @@ export default function AttendancePage() {
                     ? 'Getting your location...'
                     : 'Location will be requested when you verify'}
           </div>
-          {gpsStatus !== 'acquired' && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={locating}
-              onClick={() => acquireStudentLocation(true).catch((err) => {
-                const geoErr = err as GeolocationPositionError;
-                toast.error(geoErr?.code !== undefined ? geoErrorMessage(geoErr) : 'Could not get location');
-              })}
-            >
-              {locating ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Retry location'}
-            </Button>
-          )}
+          <div className="flex gap-2 shrink-0">
+            {gpsStatus !== 'acquired' && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={locating}
+                onClick={() => acquireStudentLocation(true).catch((err) => {
+                  const geoErr = err as GeolocationPositionError;
+                  toast.error(geoErr?.code !== undefined ? geoErrorMessage(geoErr) : 'Could not get location');
+                })}
+              >
+                {locating ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Retry location'}
+              </Button>
+            )}
+            {bypassGeofencing && gpsStatus !== 'acquired' && (
+              <span className="text-xs text-muted-foreground self-center">GPS optional</span>
+            )}
+          </div>
         </div>
 
         {/* State 1: Idle / Enter OTP */}
