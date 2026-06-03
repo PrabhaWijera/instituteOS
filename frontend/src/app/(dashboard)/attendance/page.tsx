@@ -59,6 +59,8 @@ export default function AttendancePage() {
   const [verifying, setVerifying] = useState(false);
   const [gpsStatus, setGpsStatus] = useState<'pending' | 'acquired' | 'denied'>('pending');
   const [studentHistory, setStudentHistory] = useState<any[]>([]);
+  const [studentClasses, setStudentClasses] = useState<TuitionClass[]>([]);
+  const [selectedStudentClass, setSelectedStudentClass] = useState('');
 
   useEffect(() => { fetchData(); }, []);
 
@@ -72,8 +74,14 @@ export default function AttendancePage() {
         setSessions(sessRes.data.data || []);
         setClasses(classRes.data.data || []);
       } else if (isStudent) {
-        const { data } = await api.get('/attendance/history/me');
-        setStudentHistory(data.data || []);
+        const [historyRes, classRes] = await Promise.all([
+          api.get('/attendance/history/me'),
+          api.get('/classes'),
+        ]);
+        const enrolled = classRes.data.data || [];
+        setStudentHistory(historyRes.data.data || []);
+        setStudentClasses(enrolled);
+        if (enrolled.length === 1) setSelectedStudentClass(enrolled[0].id);
       }
     } catch (err) { logger.error('Failed to load data', err); } finally { setLoading(false); }
   }
@@ -156,10 +164,20 @@ export default function AttendancePage() {
 
   // Student: verify OTP
   async function handleVerifyOtp() {
+    if (!selectedStudentClass) {
+      toast.error('Select the class you are attending');
+      return;
+    }
+    if (otp.length !== 6) {
+      toast.error('OTP must be 6 digits');
+      return;
+    }
+
     setStudentState('verifying');
     setVerifying(true);
     try {
-      let lat: number | undefined, lng: number | undefined;
+      let lat: number | undefined;
+      let lng: number | undefined;
       setGpsStatus('pending');
       try {
         const pos = await new Promise<GeolocationPosition>((res, rej) =>
@@ -170,9 +188,17 @@ export default function AttendancePage() {
         setGpsStatus('acquired');
       } catch {
         setGpsStatus('denied');
+        toast.error('Location access is required to mark attendance');
+        setStudentState('idle');
+        return;
       }
 
-      await api.post('/attendance/verify-otp', { otp, lat, lng });
+      await api.post('/attendance/verify-otp', {
+        otpCode: otp,
+        classId: selectedStudentClass,
+        latitude: lat,
+        longitude: lng,
+      });
       setStudentState('success');
       toast.success('Attendance marked!');
       setTimeout(() => { setStudentState('idle'); setOtp(''); fetchData(); }, 3000);
@@ -185,6 +211,7 @@ export default function AttendancePage() {
         setStudentState('fee_blocked');
       } else {
         setStudentState('wrong_otp');
+        toast.error(error.response?.data?.message || 'Invalid OTP');
       }
     } finally { setVerifying(false); }
   }
@@ -215,16 +242,37 @@ export default function AttendancePage() {
                 <h2 className="text-xl font-semibold">Enter Attendance OTP</h2>
                 <p className="text-sm text-muted-foreground mt-1">Ask your teacher for the code displayed on the board</p>
               </div>
-              <Input
-                placeholder="000000"
-                value={otp}
-                onChange={e => setOtp(e.target.value.replace(/\D/g, ''))}
-                maxLength={6}
-                className="text-center text-3xl tracking-[0.5em] font-mono h-16"
-              />
-              <Button className="w-full h-12 text-lg" disabled={otp.length < 4 || verifying} onClick={handleVerifyOtp}>
-                {verifying && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}Verify & Mark
-              </Button>
+              {studentClasses.length === 0 ? (
+                <p className="text-sm text-muted-foreground">You are not enrolled in any class yet.</p>
+              ) : (
+                <>
+                  <div className="space-y-2 text-left">
+                    <Label>Class</Label>
+                    <Select value={selectedStudentClass} onValueChange={setSelectedStudentClass}>
+                      <SelectTrigger><SelectValue placeholder="Select class" /></SelectTrigger>
+                      <SelectContent>
+                        {studentClasses.map(c => (
+                          <SelectItem key={c.id} value={c.id}>{c.name} — {c.subject}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Input
+                    placeholder="000000"
+                    value={otp}
+                    onChange={e => setOtp(e.target.value.replace(/\D/g, ''))}
+                    maxLength={6}
+                    className="text-center text-3xl tracking-[0.5em] font-mono h-16"
+                  />
+                  <Button
+                    className="w-full h-12 text-lg"
+                    disabled={!selectedStudentClass || otp.length !== 6 || verifying}
+                    onClick={handleVerifyOtp}
+                  >
+                    {verifying && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}Verify & Mark
+                  </Button>
+                </>
+              )}
             </CardContent>
           </Card>
         )}
