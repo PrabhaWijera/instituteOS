@@ -58,6 +58,7 @@ function getNavItems(role: User['role']): NavItem[] {
       return [
         { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, section: 'Overview' },
         { label: 'My Classes', href: '/classes', icon: BookOpen, section: 'Learning' },
+        { label: 'Materials', href: '/materials', icon: FileText, section: 'Learning' },
         { label: 'Live Sessions', href: '/live-sessions', icon: Video, section: 'Learning' },
         { label: 'Mark Attendance', href: '/attendance', icon: ClipboardCheck, section: 'Learning' },
         { label: 'AI Tutor', href: '/ai-tutor', icon: Bot, section: 'Learning' },

@@ -11,15 +11,18 @@ import { ApiError } from '../../utils/ApiError';
  * Wraps the Cloudinary upload_stream callback API in a Promise so it can be
  * composed with the circuit breaker and retry utility.
  */
-function uploadToCloudinary(buffer: Buffer): Promise<{ secure_url: string }> {
+function uploadToCloudinary(buffer: Buffer, mimetype: string): Promise<{ secure_url: string }> {
   return new Promise((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream(
-      { folder: 'nexclass/materials', resource_type: 'auto' },
-      (error, result) => {
-        if (error) return reject(error);
-        resolve(result as { secure_url: string });
-      },
-    );
+    // PDF as image resource so browsers can embed/preview inline (raw forces download)
+    const options =
+      mimetype === 'application/pdf'
+        ? { folder: 'nexclass/materials', resource_type: 'image' as const, format: 'pdf' as const }
+        : { folder: 'nexclass/materials', resource_type: 'auto' as const };
+
+    const stream = cloudinary.uploader.upload_stream(options, (error, result) => {
+      if (error) return reject(error);
+      resolve(result as { secure_url: string });
+    });
     Readable.from(buffer).pipe(stream);
   });
 }
@@ -35,7 +38,7 @@ export const create = asyncHandler(async (req: Request, res: Response) => {
     }
 
     const uploadResult = await cloudinaryCircuit.execute(() =>
-      withRetry(() => uploadToCloudinary(req.file!.buffer), {
+      withRetry(() => uploadToCloudinary(req.file!.buffer, req.file!.mimetype), {
         maxAttempts: 3,
         initialDelayMs: 500,
         operationName: 'cloudinary-upload',

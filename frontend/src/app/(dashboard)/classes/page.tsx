@@ -18,8 +18,10 @@ import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   BookOpen, Plus, Loader2, Users, Eye, EyeOff, Trash2,
-  ExternalLink, FileText, ClipboardCheck, UserMinus,
+  ExternalLink, FileText, ClipboardCheck, UserMinus, Play,
 } from 'lucide-react';
+import { MaterialPreviewDialog } from '@/components/materials/material-preview-dialog';
+import { normalizeMaterialUrl } from '@/lib/material-preview';
 import { toast } from 'sonner';
 import { formatCurrency, formatDate, getInitials } from '@/lib/utils';
 import type { TuitionClass, User, Material } from '@/lib/types';
@@ -70,6 +72,7 @@ export default function ClassesPage() {
   const [detail, setDetail] = useState<ClassDetail | null>(null);
   const [detailTab, setDetailTab] = useState<'students' | 'materials' | 'sessions'>('students');
   const [materials, setMaterials] = useState<Material[]>([]);
+  const [previewMaterial, setPreviewMaterial] = useState<Material | null>(null);
 
   // Create dialog
   const [createOpen, setCreateOpen] = useState(false);
@@ -341,7 +344,21 @@ export default function ClassesPage() {
                             </div>
                           </div>
                           <div className="flex items-center gap-1">
-                            <Button size="icon" variant="ghost" asChild><a href={mat.url} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4" /></a></Button>
+                            {mat.type !== 'LIVE_LINK' && (
+                              <>
+                                <Button size="sm" variant="default" onClick={() => setPreviewMaterial(mat)}>
+                                  <Play className="h-3.5 w-3.5 mr-1" /> Preview
+                                </Button>
+                                <Button size="icon" variant="outline" asChild>
+                                  <a href={normalizeMaterialUrl(mat.url)} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4" /></a>
+                                </Button>
+                              </>
+                            )}
+                            {mat.type === 'LIVE_LINK' && (
+                              <Button size="sm" asChild>
+                                <a href={normalizeMaterialUrl(mat.url)} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-3.5 w-3.5 mr-1" /> Join</a>
+                              </Button>
+                            )}
                             {(isAdmin || user?.role === 'TEACHER') && (
                               <>
                                 <Button size="icon" variant="ghost" onClick={() => toggleMaterialVisibility(mat.id)}>{mat.isVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</Button>
@@ -393,6 +410,8 @@ export default function ClassesPage() {
           )}
         </div>
       </div>
+
+      <MaterialPreviewDialog material={previewMaterial} onClose={() => setPreviewMaterial(null)} />
 
       {/* Create class dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>

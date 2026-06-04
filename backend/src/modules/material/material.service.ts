@@ -18,7 +18,7 @@ class MaterialService {
         title: data.title,
         type: data.type as any,
         url: data.url,
-        isVisible: false,
+        isVisible: true,
       },
     });
   }

@@ -13,6 +13,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { MaterialPreviewDialog } from '@/components/materials/material-preview-dialog';
+import { normalizeMaterialUrl } from '@/lib/material-preview';
 import { FileText, Plus, Loader2, ExternalLink, Eye, EyeOff, Trash2, Play, Video } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDate } from '@/lib/utils';
@@ -24,77 +26,6 @@ function getLivePlatform(url: string): { label: string; color: string; bg: strin
   if (/meet\.google\.com/i.test(url)) return { label: 'Google Meet', color: '#00897B', bg: '#E0F2F1' };
   if (/teams\.(microsoft|live)\.com/i.test(url)) return { label: 'MS Teams', color: '#6264A7', bg: '#EDECF8' };
   return { label: 'Live Session', color: '#E53935', bg: '#FFEBEE' };
-}
-
-function getVideoEmbed(url: string): { type: 'youtube' | 'iframe' | 'video'; src: string; ytId?: string } {
-  const ytMatch = url.match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/)|youtu\.be\/)([-\w]+)/);
-  if (ytMatch) return { type: 'youtube', src: `https://www.youtube.com/embed/${ytMatch[1]}?rel=0&autoplay=1&origin=${typeof window !== 'undefined' ? window.location.origin : ''}`, ytId: ytMatch[1] };
-  const vimeoMatch = url.match(/vimeo\.com\/(\d+)/);
-  if (vimeoMatch) return { type: 'iframe', src: `https://player.vimeo.com/video/${vimeoMatch[1]}` };
-  const driveMatch = url.match(/drive\.google\.com\/file\/d\/([^/]+)/);
-  if (driveMatch) return { type: 'iframe', src: `https://drive.google.com/file/d/${driveMatch[1]}/preview` };
-  return { type: 'video', src: url };
-}
-
-function getPdfSrc(url: string): { mode: 'direct' | 'gdocs'; src: string } {
-  // New Cloudinary auto-uploads are served under /image/upload/ with correct Content-Type
-  if (url.includes('/image/upload/')) return { mode: 'direct', src: url };
-  // Old raw uploads — use Google Docs Viewer as fallback
-  return { mode: 'gdocs', src: `https://docs.google.com/viewer?url=${encodeURIComponent(url)}&embedded=true` };
-}
-
-function VideoPreview({ url, title }: { url: string; title: string }) {
-  const [playing, setPlaying] = useState(false);
-  const embed = getVideoEmbed(url);
-  const h = 'calc(95vh - 56px)';
-
-  if (embed.type === 'youtube') {
-    return playing ? (
-      <iframe
-        src={embed.src}
-        title={title}
-        style={{ width: '100%', height: h, border: 'none', display: 'block' }}
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-        referrerPolicy="strict-origin-when-cross-origin"
-        allowFullScreen
-      />
-    ) : (
-      <div
-        onClick={() => setPlaying(true)}
-        style={{ width: '100%', height: h, background: '#000', position: 'relative', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-      >
-        <img
-          src={`https://img.youtube.com/vi/${embed.ytId}/hqdefault.jpg`}
-          alt={title}
-          style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.85 }}
-        />
-        <div style={{ position: 'absolute', background: 'rgba(0,0,0,0.7)', borderRadius: '50%', width: 72, height: 72, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Play style={{ color: '#fff', width: 32, height: 32, marginLeft: 4 }} />
-        </div>
-        <div style={{ position: 'absolute', bottom: 16, left: 0, right: 0, textAlign: 'center', color: '#fff', fontSize: 14, opacity: 0.9 }}>Click to play</div>
-      </div>
-    );
-  }
-
-  if (embed.type === 'iframe') {
-    return (
-      <iframe
-        src={embed.src}
-        title={title}
-        style={{ width: '100%', height: h, border: 'none', display: 'block' }}
-        allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-        allowFullScreen
-      />
-    );
-  }
-
-  return (
-    <video
-      src={embed.src}
-      controls
-      style={{ width: '100%', height: h, display: 'block', background: '#000' }}
-    />
-  );
 }
 
 export default function MaterialsPage() {
@@ -115,7 +46,6 @@ export default function MaterialsPage() {
       const clsRes = await api.get(user?.role === 'TEACHER' ? '/classes/my' : '/classes');
       const classList = clsRes.data.data || [];
       setClasses(classList);
-      // Fetch materials for all classes
       const allMats = await Promise.all(
         classList.map((c: { id: string }) => api.get(`/materials/class/${c.id}`).catch(() => ({ data: { data: [] } })))
       );
@@ -135,9 +65,11 @@ export default function MaterialsPage() {
         formData.append('file', file);
         await api.post(`/materials/class/${form.classId}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
       } else {
-        await api.post(`/materials/class/${form.classId}`, form);
+        let url = form.url.trim();
+        if (url && !url.match(/^https?:\/\//)) url = 'https://' + url;
+        await api.post(`/materials/class/${form.classId}`, { title: form.title, type: form.type, url });
       }
-      toast.success('Material uploaded');
+      toast.success('Material uploaded — students can view it now');
       setDialogOpen(false);
       setForm({ title: '', classId: '', type: 'PDF', url: '' });
       setFile(null);
@@ -151,7 +83,7 @@ export default function MaterialsPage() {
   async function toggleVisibility(id: string) {
     try {
       await api.patch(`/materials/${id}/visibility`);
-      toast.success('Visibility toggled');
+      toast.success('Visibility updated');
       fetchData();
     } catch (err) { logger.error('Toggle visibility failed', err); toast.error('Failed'); }
   }
@@ -165,13 +97,14 @@ export default function MaterialsPage() {
   }
 
   const isTeacher = user?.role === 'TEACHER' || user?.role === 'INSTITUTE_ADMIN';
+  const canManage = isTeacher;
 
   if (loading) return <CardGridSkeleton />;
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Materials" description="Class materials and resources">
-        {isTeacher && (
+      <PageHeader title="Materials" description={canManage ? 'Class materials and resources' : 'Study materials for your classes'}>
+        {canManage && (
           <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setForm({ title: '', classId: '', type: 'PDF', url: '' }); setFile(null); } }}>
             <DialogTrigger asChild>
               <Button><Plus className="h-4 w-4 mr-2" />Upload</Button>
@@ -198,7 +131,7 @@ export default function MaterialsPage() {
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="PDF">PDF Document</SelectItem>
-                      <SelectItem value="VIDEO_LINK">Video Link</SelectItem>
+                      <SelectItem value="VIDEO_LINK">Video Link (YouTube, etc.)</SelectItem>
                       <SelectItem value="LIVE_LINK">Live Session Link (Zoom / Meet / Teams)</SelectItem>
                     </SelectContent>
                   </Select>
@@ -206,16 +139,25 @@ export default function MaterialsPage() {
                 {form.type === 'PDF' ? (
                   <div key="file-input" className="space-y-2">
                     <Label>File</Label>
-                    <Input type="file" accept=".pdf" onChange={(e) => setFile(e.target.files?.[0] || null)} required />
+                    <Input type="file" accept=".pdf,application/pdf" onChange={(e) => setFile(e.target.files?.[0] || null)} required />
                   </div>
                 ) : (
                   <div key="url-input" className="space-y-2">
-                    <Label>{form.type === 'LIVE_LINK' ? 'Meeting Link' : 'URL'}</Label>
-                    <Input value={form.url} onChange={(e) => { let v = e.target.value; if (v && !v.match(/^https?:\/\//)) v = 'https://' + v; setForm({ ...form, url: v }); }} placeholder={form.type === 'LIVE_LINK' ? 'https://zoom.us/j/... or meet.google.com/...' : 'https://...'} required />
+                    <Label>{form.type === 'LIVE_LINK' ? 'Meeting Link' : 'Video URL'}</Label>
+                    <Input
+                      value={form.url}
+                      onChange={(e) => {
+                        let v = e.target.value;
+                        if (v && !v.match(/^https?:\/\//)) v = 'https://' + v;
+                        setForm({ ...form, url: v });
+                      }}
+                      placeholder={form.type === 'LIVE_LINK' ? 'https://zoom.us/j/...' : 'https://www.youtube.com/watch?v=...'}
+                      required
+                    />
                   </div>
                 )}
                 <DialogFooter>
-                  <Button type="submit" disabled={uploading}>
+                  <Button type="submit" disabled={uploading || !form.classId}>
                     {uploading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Upload
                   </Button>
                 </DialogFooter>
@@ -226,53 +168,60 @@ export default function MaterialsPage() {
       </PageHeader>
 
       {materials.length === 0 ? (
-        <EmptyState title="No materials" description="Upload study materials for your classes" icon={FileText} />
+        <EmptyState
+          title="No materials"
+          description={canManage ? 'Upload study materials for your classes' : 'Your teacher has not shared materials yet'}
+          icon={FileText}
+        />
       ) : (
         <div className="space-y-3">
           {materials.map((mat) => {
             const platform = mat.type === 'LIVE_LINK' ? getLivePlatform(mat.url) : null;
+            const openUrl = normalizeMaterialUrl(mat.url);
             return (
               <Card key={mat.id} className={mat.type === 'LIVE_LINK' ? 'border-l-4' : ''} style={mat.type === 'LIVE_LINK' ? { borderLeftColor: platform?.color } : {}}>
-                <CardContent className="flex items-center justify-between p-4">
-                  <div className="flex items-center gap-3">
+                <CardContent className="flex items-center justify-between p-4 gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
                     {mat.type === 'LIVE_LINK' ? (
-                      <div className="flex h-9 w-9 rounded-lg items-center justify-center" style={{ background: platform?.bg }}>
+                      <div className="flex h-9 w-9 rounded-lg items-center justify-center shrink-0" style={{ background: platform?.bg }}>
                         <Video className="h-4 w-4" style={{ color: platform?.color }} />
                       </div>
                     ) : (
-                      <FileText className="h-5 w-5 text-primary" />
+                      <FileText className="h-5 w-5 text-primary shrink-0" />
                     )}
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium">{mat.title}</p>
-                        {mat.type === 'LIVE_LINK' && (
-                          <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ color: platform?.color, background: platform?.bg }}>{platform?.label}</span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-medium truncate">{mat.title}</p>
+                        {mat.type === 'LIVE_LINK' && platform && (
+                          <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ color: platform.color, background: platform.bg }}>{platform.label}</span>
                         )}
                       </div>
                       <p className="text-sm text-muted-foreground">{mat.class?.name} &middot; {formatDate(mat.createdAt)}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant={mat.isVisible ? 'success' : 'secondary'}>
-                      {mat.isVisible ? 'Visible' : 'Hidden'}
-                    </Badge>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {canManage && (
+                      <Badge variant={mat.isVisible ? 'success' : 'secondary'}>
+                        {mat.isVisible ? 'Visible' : 'Hidden'}
+                      </Badge>
+                    )}
                     {mat.type === 'LIVE_LINK' ? (
                       <Button size="sm" asChild style={{ background: platform?.color, color: '#fff' }}>
-                        <a href={mat.url?.startsWith('http') ? mat.url : `https://${mat.url}`} target="_blank" rel="noopener noreferrer">Join</a>
+                        <a href={openUrl} target="_blank" rel="noopener noreferrer">Join</a>
                       </Button>
                     ) : (
                       <>
-                        <Button size="icon" variant="ghost" onClick={() => setPreview(mat)} title="Preview">
-                          <Play className="h-4 w-4" />
+                        <Button size="sm" variant="default" onClick={() => setPreview(mat)}>
+                          <Play className="h-3.5 w-3.5 mr-1" /> Preview
                         </Button>
-                        <Button size="icon" variant="ghost" asChild title="Open in new tab">
-                          <a href={mat.url?.startsWith('http') ? mat.url : `https://${mat.url}`} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4" /></a>
+                        <Button size="icon" variant="outline" asChild title="Open in new tab">
+                          <a href={openUrl} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4" /></a>
                         </Button>
                       </>
                     )}
-                    {isTeacher && (
+                    {canManage && (
                       <>
-                        <Button size="icon" variant="ghost" onClick={() => toggleVisibility(mat.id)}>
+                        <Button size="icon" variant="ghost" onClick={() => toggleVisibility(mat.id)} title={mat.isVisible ? 'Hide from students' : 'Show to students'}>
                           {mat.isVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </Button>
                         <Button size="icon" variant="ghost" className="text-destructive" onClick={() => deleteMaterial(mat.id)}>
@@ -287,35 +236,8 @@ export default function MaterialsPage() {
           })}
         </div>
       )}
-      {preview && (
-        <Dialog open={!!preview} onOpenChange={(o) => { if (!o) setPreview(null); }}>
-          <DialogContent className="max-w-4xl w-full p-0" style={{ maxHeight: '95vh', overflow: 'hidden' }}>
-            <DialogHeader className="px-5 py-3 border-b">
-              <div className="flex items-center justify-between pr-8">
-                <DialogTitle className="flex items-center gap-2 text-sm font-semibold">
-                  {preview.type === 'PDF' ? <FileText className="h-4 w-4 shrink-0" /> : <Play className="h-4 w-4 shrink-0" />}
-                  <span className="truncate">{preview.title}</span>
-                </DialogTitle>
-                <a href={preview.url} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary whitespace-nowrap">
-                  <ExternalLink className="h-3 w-3" /> Open in new tab
-                </a>
-              </div>
-            </DialogHeader>
-            {preview.type === 'PDF' ? (
-              <iframe
-                key={preview.id}
-                src={getPdfSrc(preview.url).src}
-                title={preview.title}
-                style={{ width: '100%', height: 'calc(95vh - 56px)', border: 'none', display: 'block' }}
-                sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-              />
-            ) : (
-              <VideoPreview key={preview.id} url={preview.url} title={preview.title} />
-            )}
-          </DialogContent>
-        </Dialog>
-      )}
+
+      <MaterialPreviewDialog material={preview} onClose={() => setPreview(null)} />
     </div>
   );
 }

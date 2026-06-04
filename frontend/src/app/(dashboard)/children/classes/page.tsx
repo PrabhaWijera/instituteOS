@@ -8,7 +8,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { BookOpen, ExternalLink, Lock } from 'lucide-react';
+import { BookOpen, ExternalLink, Lock, Play } from 'lucide-react';
+import { MaterialPreviewDialog } from '@/components/materials/material-preview-dialog';
+import { normalizeMaterialUrl } from '@/lib/material-preview';
 import { formatCurrency } from '@/lib/utils';
 import type { StudentProfile, Material } from '@/lib/types';
 import logger from '@/lib/logger';
@@ -20,6 +22,7 @@ export default function ParentClassesPage() {
   const [loading, setLoading] = useState(true);
   const [selectedClass, setSelectedClass] = useState<any>(null);
   const [materials, setMaterials] = useState<Material[]>([]);
+  const [previewMaterial, setPreviewMaterial] = useState<Material | null>(null);
 
   useEffect(() => {
     api.get('/parent/children').then(({ data }) => {
@@ -41,7 +44,8 @@ export default function ParentClassesPage() {
     setSelectedClass(enrollment);
     try {
       const { data } = await api.get(`/parent/children/${selectedChild}/materials`);
-      setMaterials((data.data || []).filter((m: Material) => m.isVisible));
+      const classId = enrollment.class?.id || enrollment.classId;
+      setMaterials((data.data || []).filter((m: Material) => m.isVisible && (!classId || m.classId === classId)));
     } catch { setMaterials([]); }
   }
 
@@ -101,9 +105,18 @@ export default function ParentClassesPage() {
                             <Badge variant={m.type === 'PDF' ? 'destructive' : 'default'} className="text-[10px] mt-0.5">{m.type === 'PDF' ? 'PDF' : 'Video'}</Badge>
                           </div>
                         </div>
-                        <Button size="sm" variant="outline" asChild>
-                          <a href={m.url} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-3 w-3 mr-1" />{m.type === 'PDF' ? 'Open PDF' : 'Watch'}</a>
-                        </Button>
+                        <div className="flex gap-2">
+                          {m.type !== 'LIVE_LINK' && (
+                            <Button size="sm" onClick={() => setPreviewMaterial(m)}>
+                              <Play className="h-3 w-3 mr-1" /> Preview
+                            </Button>
+                          )}
+                          <Button size="sm" variant="outline" asChild>
+                            <a href={normalizeMaterialUrl(m.url)} target="_blank" rel="noopener noreferrer">
+                              <ExternalLink className="h-3 w-3 mr-1" />{m.type === 'PDF' ? 'Open' : 'Watch'}
+                            </a>
+                          </Button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -113,6 +126,8 @@ export default function ParentClassesPage() {
           )}
         </div>
       </div>
+
+      <MaterialPreviewDialog material={previewMaterial} onClose={() => setPreviewMaterial(null)} />
 
       <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 rounded-md p-3">
         <Lock className="h-4 w-4 shrink-0" />
