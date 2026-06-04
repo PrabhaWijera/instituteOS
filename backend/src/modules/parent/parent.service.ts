@@ -1,5 +1,6 @@
 import prisma from '../../config/prisma';
 import { ApiError } from '../../utils/ApiError';
+import { decodeStoredUrl } from '../../utils/decodeStoredUrl';
 
 class ParentService {
   async getChildren(userId: string) {
@@ -105,11 +106,12 @@ class ParentService {
 
     const classIds = enrollments.map((e) => e.classId);
 
-    return prisma.classMaterial.findMany({
+    const rows = await prisma.classMaterial.findMany({
       where: { classId: { in: classIds }, isVisible: true },
       include: { class: { select: { name: true } }, uploadedBy: { select: { fullName: true } } },
       orderBy: { createdAt: 'desc' },
     });
+    return rows.map((row) => ({ ...row, url: decodeStoredUrl(row.url) }));
   }
 }
 

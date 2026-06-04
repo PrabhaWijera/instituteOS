@@ -1,5 +1,6 @@
 import prisma from '../../config/prisma';
 import { ApiError } from '../../utils/ApiError';
+import { decodeStoredUrl } from '../../utils/decodeStoredUrl';
 import cloudinary from '../../config/cloudinary';
 import { cloudinaryCircuit } from '../../config/resilience';
 import { withRetry } from '../../utils/retry';
@@ -11,16 +12,17 @@ class MaterialService {
       const cls = await prisma.tuitionClass.findFirst({ where: { id: classId, teacherId: uploadedById, isDeleted: false } });
       if (!cls) throw new ApiError(403, 'You can only upload materials to your own classes');
     }
-    return prisma.classMaterial.create({
+    const material = await prisma.classMaterial.create({
       data: {
         classId,
         uploadedById,
         title: data.title,
         type: data.type as any,
-        url: data.url,
+        url: decodeStoredUrl(data.url),
         isVisible: true,
       },
     });
+    return { ...material, url: decodeStoredUrl(material.url) };
   }
 
   async getByClass(classId: string, role: string, userId: string) {
@@ -53,7 +55,7 @@ class MaterialService {
     const where: any = { classId };
     if (role === 'STUDENT' || role === 'PARENT') where.isVisible = true;
 
-    return prisma.classMaterial.findMany({
+    const rows = await prisma.classMaterial.findMany({
       where,
       include: {
         uploadedBy: { select: { fullName: true } },
@@ -61,6 +63,7 @@ class MaterialService {
       },
       orderBy: { createdAt: 'desc' },
     });
+    return rows.map((row) => ({ ...row, url: decodeStoredUrl(row.url) }));
   }
 
   async toggleVisibility(id: string, userId: string, role: string) {
@@ -71,10 +74,11 @@ class MaterialService {
       throw new ApiError(403, 'You can only modify your own materials');
     }
 
-    return prisma.classMaterial.update({
+    const updated = await prisma.classMaterial.update({
       where: { id },
       data: { isVisible: !material.isVisible },
     });
+    return { ...updated, url: decodeStoredUrl(updated.url) };
   }
 
   async delete(id: string, userId: string, role: string) {
