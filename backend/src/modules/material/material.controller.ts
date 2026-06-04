@@ -14,9 +14,10 @@ import { ApiError } from '../../utils/ApiError';
 function uploadToCloudinary(buffer: Buffer, mimetype: string): Promise<{ secure_url: string }> {
   return new Promise((resolve, reject) => {
     // PDF as image resource so browsers can embed/preview inline (raw forces download)
+    // PDF as raw + public delivery (enable "PDF" in Cloudinary Console → Settings → Security)
     const options =
       mimetype === 'application/pdf'
-        ? { folder: 'nexclass/materials', resource_type: 'image' as const, format: 'pdf' as const }
+        ? { folder: 'nexclass/materials', resource_type: 'raw' as const }
         : { folder: 'nexclass/materials', resource_type: 'auto' as const };
 
     const stream = cloudinary.uploader.upload_stream(options, (error, result) => {

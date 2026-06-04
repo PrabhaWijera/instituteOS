@@ -14,7 +14,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MaterialPreviewDialog } from '@/components/materials/material-preview-dialog';
-import { normalizeMaterialUrl } from '@/lib/material-preview';
+import { getCloudinaryInlinePdfUrl, normalizeMaterialUrl } from '@/lib/material-preview';
 import { FileText, Plus, Loader2, ExternalLink, Eye, EyeOff, Trash2, Play, Video } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDate } from '@/lib/utils';
@@ -177,7 +177,9 @@ export default function MaterialsPage() {
         <div className="space-y-3">
           {materials.map((mat) => {
             const platform = mat.type === 'LIVE_LINK' ? getLivePlatform(mat.url) : null;
-            const openUrl = normalizeMaterialUrl(mat.url);
+            const openUrl = mat.type === 'PDF'
+              ? getCloudinaryInlinePdfUrl(mat.url)
+              : normalizeMaterialUrl(mat.url);
             return (
               <Card key={mat.id} className={mat.type === 'LIVE_LINK' ? 'border-l-4' : ''} style={mat.type === 'LIVE_LINK' ? { borderLeftColor: platform?.color } : {}}>
                 <CardContent className="flex items-center justify-between p-4 gap-3">
