@@ -140,15 +140,15 @@ export default function HomePage() {
       {/* Navbar */}
       <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 text-white text-sm font-bold shadow-lg shadow-violet-500/20">
+          <Link href="/login" className="flex items-center gap-2.5 group">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 text-white text-sm font-bold shadow-lg shadow-violet-500/20 group-hover:shadow-violet-500/40 transition-shadow">
               iO
             </div>
             <div>
               <span className="text-base font-bold leading-none">instituteOS</span>
               <span className="block text-[10px] text-muted-foreground tracking-wide">MANAGEMENT</span>
             </div>
-          </div>
+          </Link>
           <Link
             href="/login"
             className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-md shadow-primary/25 hover:bg-primary/90 transition-all"
@@ -332,12 +332,12 @@ export default function HomePage() {
       {/* Footer */}
       <footer className="border-t py-10">
         <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2.5">
+          <Link href="/login" className="flex items-center gap-2.5 hover:opacity-90 transition-opacity">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-violet-600 to-indigo-600 text-white text-xs font-bold">
               iO
             </div>
             <span className="font-semibold">instituteOS</span>
-          </div>
+          </Link>
           <p className="text-sm text-muted-foreground">Built for modern tuition institutes · All rights reserved</p>
           <Link href="/login" className="text-sm text-primary font-medium hover:underline">
             Sign In →

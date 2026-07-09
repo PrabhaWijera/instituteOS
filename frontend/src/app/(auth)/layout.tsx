@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="relative flex min-h-screen items-center justify-center p-4 overflow-hidden">
@@ -8,10 +10,12 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
 
       <div className="relative w-full max-w-md animate-in">
         <div className="mb-8 text-center">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-600 text-white text-xl font-bold mb-4 shadow-xl shadow-violet-500/25">
-            iO
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight">instituteOS</h1>
+          <Link href="/login" className="inline-block group">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-600 text-white text-xl font-bold mb-4 shadow-xl shadow-violet-500/25 group-hover:shadow-violet-500/40 transition-shadow">
+              iO
+            </div>
+            <h1 className="text-3xl font-bold tracking-tight">instituteOS</h1>
+          </Link>
           <p className="text-sm text-muted-foreground mt-1">Smart Institute Management Platform</p>
         </div>
         {children}
